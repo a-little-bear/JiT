@@ -124,6 +124,9 @@ def get_args_parser():
 
 
 def main(args):
+    ### Edited
+    torch.set_float32_matmul_precision('high')
+    
     misc.init_distributed_mode(args)
     print('Job directory:', os.path.dirname(os.path.realpath(__file__)))
     print("Arguments:\n{}".format(args).replace(', ', ',\n'))

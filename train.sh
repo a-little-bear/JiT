@@ -2,6 +2,8 @@
 export NCCL_P2P_DISABLE=1
 export NCCL_IB_DISABLE=1
 export TORCH_CUDA_ARCH_LIST="12.0"
+export CC=$(which x86_64-conda-linux-gnu-gcc)
+export CXX=$(which x86_64-conda-linux-gnu-g++)
 
 # 设置你的数据路径
 TRAIN_DIR="/mnt/d/Dataset/ILSVRC2012_img_train"
@@ -20,14 +22,14 @@ main_jit.py \
 --proj_dropout 0.0 \
 --P_mean -0.8 --P_std 0.8 \
 --img_size 256 --noise_scale 1.0 \
---batch_size 64 \
+--batch_size 130 \
 --num_sampling_steps 25 \
 --sampling_method euler \
 --subset_ratio 0.01 \
---global_batch_size 1024 \
+--global_batch_size 1300 \
 --blr 5e-5 \
 --epochs 600 --warmup_epochs 5 \
---gen_bsz 512 \
+--gen_bsz 1024 \
 --num_images 2000 --cfg 2.9 --interval_min 0.1 --interval_max 1.0 \
 --output_dir ${OUTPUT_DIR} \
 --data_path ${TRAIN_DIR} \
