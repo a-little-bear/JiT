@@ -9,12 +9,14 @@ class Denoiser(nn.Module):
         args
     ):
         super().__init__()
+        self.args = args
         self.net = JiT_models[args.model](
             input_size=args.img_size,
             in_channels=3,
             num_classes=args.class_num,
             attn_drop=args.attn_dropout,
             proj_drop=args.proj_dropout,
+            args=args
         )
         self.img_size = args.img_size
         self.num_classes = args.class_num
@@ -61,6 +63,21 @@ class Denoiser(nn.Module):
         # l2 loss
         loss = (v - v_pred) ** 2
         loss = loss.mean(dim=(1, 2, 3)).mean()
+
+
+        ### Edited
+        ss_loss = 0.0
+        if getattr(self.args, 'use_self_supervised', False):
+            if self.args.ss_method == 'time_pred':
+                # 方法A: 预测时间步 (假设 net 输出包含特征)
+                # t_pred = self.time_head(self.net.last_feat) 
+                # ss_loss = F.mse_loss(t_pred, t)
+                pass 
+            elif self.args.ss_method == 'rotation':
+                # 方法B: 旋转预测 (需要对输入 x 进行旋转并让模型预测角度)
+                # x_90 = torch.rot90(x, 1, [2, 3])
+                # ... 计算旋转分类损失 ...
+                pass
 
         return loss
 

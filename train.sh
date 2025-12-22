@@ -5,7 +5,7 @@ export TORCH_CUDA_ARCH_LIST="12.0"
 
 # 设置你的数据路径
 TRAIN_DIR="/mnt/d/Dataset/ILSVRC2012_img_train"
-OUTPUT_DIR="./output_5090_jit_b16"
+OUTPUT_DIR="./output_jit_b16"
 
 # 创建输出目录
 mkdir -p ${OUTPUT_DIR}
@@ -21,11 +21,15 @@ main_jit.py \
 --P_mean -0.8 --P_std 0.8 \
 --img_size 256 --noise_scale 1.0 \
 --batch_size 64 \
+--num_sampling_steps 25 \
+--sampling_method euler \
+--subset_ratio 0.01 \
 --global_batch_size 1024 \
 --blr 5e-5 \
 --epochs 600 --warmup_epochs 5 \
---gen_bsz 64 \
---num_images 50000 --cfg 2.9 --interval_min 0.1 --interval_max 1.0 \
+--gen_bsz 512 \
+--num_images 2000 --cfg 2.9 --interval_min 0.1 --interval_max 1.0 \
 --output_dir ${OUTPUT_DIR} \
 --data_path ${TRAIN_DIR} \
---online_eval
+--online_eval \
+--eval_freq 20 

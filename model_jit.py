@@ -96,7 +96,8 @@ def scaled_dot_product_attention(query, key, value, dropout_p=0.0) -> torch.Tens
     scale_factor = 1 / math.sqrt(query.size(-1))
     attn_bias = torch.zeros(query.size(0), 1, L, S, dtype=query.dtype).cuda()
 
-    with torch.cuda.amp.autocast(enabled=False):
+    ### Edited
+    with torch.amp.autocast('cuda', enabled=False):
         attn_weight = query.float() @ key.float().transpose(-2, -1) * scale_factor
     attn_weight += attn_bias
     attn_weight = torch.softmax(attn_weight, dim=-1)
@@ -181,18 +182,30 @@ class FinalLayer(nn.Module):
 
 
 class JiTBlock(nn.Module):
-    def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, attn_drop=0.0, proj_drop=0.0):
+    def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, attn_drop=0.0, proj_drop=0.0, args=None):
         super().__init__()
         self.norm1 = RMSNorm(hidden_size, eps=1e-6)
         self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, qk_norm=True,
                               attn_drop=attn_drop, proj_drop=proj_drop)
         self.norm2 = RMSNorm(hidden_size, eps=1e-6)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
-        self.mlp = SwiGLUFFN(hidden_size, mlp_hidden_dim, drop=proj_drop)
+        #self.mlp = SwiGLUFFN(hidden_size, mlp_hidden_dim, drop=proj_drop)
         self.adaLN_modulation = nn.Sequential(
             nn.SiLU(),
             nn.Linear(hidden_size, 6 * hidden_size, bias=True)
         )
+
+        ### Edited
+        if args is not None and getattr(args, 'use_nonlinear', False):
+            self.mlp = nn.Sequential(
+                nn.Linear(hidden_size, hidden_size // 2),
+                nn.GELU(),
+                nn.Linear(hidden_size // 2, mlp_hidden_dim),
+                nn.SiLU(),
+                nn.Linear(mlp_hidden_dim, hidden_size)
+            )
+        else:
+            self.mlp = SwiGLUFFN(hidden_size, mlp_hidden_dim, drop=proj_drop)
 
     #@torch.compile
     def forward(self, x,  c, feat_rope=None):
@@ -220,7 +233,8 @@ class JiT(nn.Module):
         num_classes=1000,
         bottleneck_dim=128,
         in_context_len=32,
-        in_context_start=8
+        in_context_start=8,
+        args=None
     ):
         super().__init__()
         self.in_channels = in_channels
@@ -267,7 +281,8 @@ class JiT(nn.Module):
         self.blocks = nn.ModuleList([
             JiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio,
                      attn_drop=attn_drop if (depth // 4 * 3 > i >= depth // 4) else 0.0,
-                     proj_drop=proj_drop if (depth // 4 * 3 > i >= depth // 4) else 0.0)
+                     proj_drop=proj_drop if (depth // 4 * 3 > i >= depth // 4) else 0.0,
+                     args=args)
             for i in range(depth)
         ])
 
@@ -359,29 +374,29 @@ class JiT(nn.Module):
         return output
 
 
-def JiT_B_16(**kwargs):
+def JiT_B_16(args=None, **kwargs):
     return JiT(depth=12, hidden_size=768, num_heads=12,
-               bottleneck_dim=128, in_context_len=32, in_context_start=4, patch_size=16, **kwargs)
+               bottleneck_dim=128, in_context_len=32, in_context_start=4, patch_size=16, **kwargs, args=args)
 
-def JiT_B_32(**kwargs):
+def JiT_B_32(args=None, **kwargs):
     return JiT(depth=12, hidden_size=768, num_heads=12,
-               bottleneck_dim=128, in_context_len=32, in_context_start=4, patch_size=32, **kwargs)
+               bottleneck_dim=128, in_context_len=32, in_context_start=4, patch_size=32, **kwargs, args=args)
 
-def JiT_L_16(**kwargs):
+def JiT_L_16(args=None, **kwargs):
     return JiT(depth=24, hidden_size=1024, num_heads=16,
-               bottleneck_dim=128, in_context_len=32, in_context_start=8, patch_size=16, **kwargs)
+               bottleneck_dim=128, in_context_len=32, in_context_start=8, patch_size=16, **kwargs, args=args)
 
-def JiT_L_32(**kwargs):
+def JiT_L_32(args=None, **kwargs):
     return JiT(depth=24, hidden_size=1024, num_heads=16,
-               bottleneck_dim=128, in_context_len=32, in_context_start=8, patch_size=32, **kwargs)
+               bottleneck_dim=128, in_context_len=32, in_context_start=8, patch_size=32, **kwargs, args=args)
 
-def JiT_H_16(**kwargs):
+def JiT_H_16(args=None, **kwargs):
     return JiT(depth=32, hidden_size=1280, num_heads=16,
-               bottleneck_dim=256, in_context_len=32, in_context_start=10, patch_size=16, **kwargs)
+               bottleneck_dim=256, in_context_len=32, in_context_start=10, patch_size=16, **kwargs, args=args)
 
-def JiT_H_32(**kwargs):
+def JiT_H_32(args=None, **kwargs):
     return JiT(depth=32, hidden_size=1280, num_heads=16,
-               bottleneck_dim=256, in_context_len=32, in_context_start=10, patch_size=32, **kwargs)
+               bottleneck_dim=256, in_context_len=32, in_context_start=10, patch_size=32, **kwargs, args=args)
 
 
 JiT_models = {

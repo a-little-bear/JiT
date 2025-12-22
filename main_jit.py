@@ -112,6 +112,13 @@ def get_args_parser():
     ### Edited
     parser.add_argument('--global_batch_size', default=1024, type=int,
                         help='Target effective batch size (default: 1024)')
+    parser.add_argument('--use_nonlinear', action='store_true', help='是否开启非线性瓶颈设计')
+    parser.add_argument('--use_self_supervised', action='store_true', help='是否开启自监督信号')
+    parser.add_argument('--ss_method', default='time_pred', type=str, choices=['time_pred', 'rotation'], 
+                        help='自监督方法选择: 时间步预测 或 旋转预测')
+    parser.add_argument('--ss_weight', default=0.1, type=float, help='自监督损失权重')
+    parser.add_argument('--subset_ratio', default=1.0, type=float, 
+                        help='使用数据集的比例 (0.0 到 1.0)')
     
     return parser
 
@@ -152,12 +159,18 @@ def main(args):
     if not os.path.exists(train_root):
         print(f"Subfolder 'train' not found in {args.data_path}, using {args.data_path} directly.")
         train_root = args.data_path
-    
     dataset_train = datasets.ImageFolder(train_root, transform=transform_train)
     print(dataset_train)
-
     # dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
     # print(dataset_train)
+    if args.subset_ratio < 1.0:
+        num_samples = len(dataset_train)
+        subset_size = int(num_samples * args.subset_ratio)
+        indices = torch.randperm(num_samples, generator=torch.Generator().manual_seed(args.seed))[:subset_size]
+        dataset_train = torch.utils.data.Subset(dataset_train, indices)
+        print(f"--- Using Subset: {args.subset_ratio * 100}% ({subset_size}/{num_samples} images) ---")
+    else:
+        print(f"--- Using Full Dataset: {len(dataset_train)} images ---")
 
     sampler_train = torch.utils.data.DistributedSampler(
         dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
