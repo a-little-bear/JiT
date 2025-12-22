@@ -13,7 +13,7 @@ import torch_fidelity
 import copy
 
 
-def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, epoch, log_writer=None, args=None):
+def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, epoch, log_writer=None, args=None, accum_iter=1):
     model.train(True)
     metric_logger = misc.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -38,13 +38,23 @@ def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, ep
             loss = model(x, labels)
 
         loss_value = loss.item()
+
+        ### Edited
+        loss = loss / accum_iter
+
         if not math.isfinite(loss_value):
             print("Loss is {}, stopping training".format(loss_value))
             sys.exit(1)
 
-        optimizer.zero_grad()
+        ### Edited
+        # optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
+        # optimizer.step()
+        if (data_iter_step + 1) % accum_iter == 0:
+            optimizer.step()
+            optimizer.zero_grad()
+            torch.cuda.synchronize()
+            model_without_ddp.update_ema()
 
         torch.cuda.synchronize()
 

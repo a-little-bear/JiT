@@ -109,6 +109,10 @@ def get_args_parser():
     parser.add_argument('--dist_url', default='env://',
                         help='URL used to set up distributed training')
 
+    ### Edited
+    parser.add_argument('--global_batch_size', default=1024, type=int,
+                        help='Target effective batch size (default: 1024)')
+    
     return parser
 
 
@@ -143,8 +147,17 @@ def main(args):
         transforms.PILToTensor()
     ])
 
-    dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
+    ### Edited
+    train_root = os.path.join(args.data_path, 'train')
+    if not os.path.exists(train_root):
+        print(f"Subfolder 'train' not found in {args.data_path}, using {args.data_path} directly.")
+        train_root = args.data_path
+    
+    dataset_train = datasets.ImageFolder(train_root, transform=transform_train)
     print(dataset_train)
+
+    # dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
+    # print(dataset_train)
 
     sampler_train = torch.utils.data.DistributedSampler(
         dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
@@ -171,13 +184,27 @@ def main(args):
 
     model.to(device)
 
-    eff_batch_size = args.batch_size * misc.get_world_size()
-    if args.lr is None:  # only base_lr (blr) is specified
-        args.lr = args.blr * eff_batch_size / 256
-
-    print("Base lr: {:.2e}".format(args.lr * 256 / eff_batch_size))
+    ### Edited
+    world_size = misc.get_world_size()
+    physical_batch_size = args.batch_size * world_size
+    assert args.global_batch_size % physical_batch_size == 0, \
+        f"Global batch size ({args.global_batch_size}) must be divisible by physical batch size ({physical_batch_size})"
+    accum_iter = args.global_batch_size // physical_batch_size
+    print(f"Physical Batch Size: {physical_batch_size}")
+    print(f"Target Global Batch Size: {args.global_batch_size}")
+    print(f"Gradient Accumulation Steps: {accum_iter}")
+    if args.lr is None:
+        args.lr = args.blr * args.global_batch_size / 256
+    print("Base lr: {:.2e}".format(args.lr * 256 / args.global_batch_size))
     print("Actual lr: {:.2e}".format(args.lr))
-    print("Effective batch size: %d" % eff_batch_size)
+
+    # eff_batch_size = args.batch_size * misc.get_world_size()
+    # if args.lr is None:  # only base_lr (blr) is specified
+    #     args.lr = args.blr * eff_batch_size / 256
+    
+    # print("Base lr: {:.2e}".format(args.lr * 256 / eff_batch_size))
+    # print("Actual lr: {:.2e}".format(args.lr))
+    # print("Effective batch size: %d" % eff_batch_size)
 
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
     model_without_ddp = model.module
@@ -225,7 +252,13 @@ def main(args):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
 
-        train_one_epoch(model, model_without_ddp, data_loader_train, optimizer, device, epoch, log_writer=log_writer, args=args)
+        ### Edited
+        train_one_epoch(
+            model, model_without_ddp, data_loader_train, optimizer, device, epoch, 
+            log_writer=log_writer, args=args, 
+            accum_iter=accum_iter
+        )
+        # train_one_epoch(model, model_without_ddp, data_loader_train, optimizer, device, epoch, log_writer=log_writer, args=args)
 
         # Save checkpoint periodically
         if epoch % args.save_last_freq == 0 or epoch + 1 == args.epochs:
