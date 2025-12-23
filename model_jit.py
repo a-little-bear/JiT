@@ -17,7 +17,7 @@ def modulate(x, shift, scale):
 class BottleneckPatchEmbed(nn.Module):
     """ Image to Patch Embedding
     """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, pca_dim=768, embed_dim=768, bias=True):
+    def __init__(self, img_size=224, patch_size=16, in_chans=3, pca_dim=768, embed_dim=768, bias=True, use_nonlinear=False):
         super().__init__()
         img_size = (img_size, img_size)
         patch_size = (patch_size, patch_size)
@@ -27,13 +27,14 @@ class BottleneckPatchEmbed(nn.Module):
         self.num_patches = num_patches
 
         self.proj1 = nn.Conv2d(in_chans, pca_dim, kernel_size=patch_size, stride=patch_size, bias=False)
+        self.act = nn.SiLU() if use_nonlinear else nn.Identity()
         self.proj2 = nn.Conv2d(pca_dim, embed_dim, kernel_size=1, stride=1, bias=bias)
 
     def forward(self, x):
         B, C, H, W = x.shape
         assert H == self.img_size[0] and W == self.img_size[1], \
             f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
-        x = self.proj2(self.proj1(x)).flatten(2).transpose(1, 2)
+        x = self.proj2(self.act(self.proj1(x))).flatten(2).transpose(1, 2)
         return x
 
 
@@ -252,7 +253,8 @@ class JiT(nn.Module):
         self.y_embedder = LabelEmbedder(num_classes, hidden_size)
 
         # linear embed
-        self.x_embedder = BottleneckPatchEmbed(input_size, patch_size, in_channels, bottleneck_dim, hidden_size, bias=True)
+        use_nonlinear = getattr(args, 'use_nonlinear', False)
+        self.x_embedder = BottleneckPatchEmbed(input_size, patch_size, in_channels, bottleneck_dim, hidden_size, bias=True, use_nonlinear=use_nonlinear)
 
         # use fixed sin-cos embedding
         num_patches = self.x_embedder.num_patches
@@ -288,6 +290,9 @@ class JiT(nn.Module):
 
         # linear predict
         self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
+
+        ### Edited
+        self.last_feat = None
 
         self.initialize_weights()
 
@@ -367,6 +372,9 @@ class JiT(nn.Module):
             x = block(x, c, self.feat_rope if i < self.in_context_start else self.feat_rope_incontext)
 
         x = x[:, self.in_context_len:]
+
+        ### Edited
+        self.last_feat = x.mean(dim=1)
 
         x = self.final_layer(x, c)
         output = self.unpatchify(x, self.patch_size)

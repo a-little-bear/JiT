@@ -84,8 +84,8 @@ def evaluate(model_without_ddp, args, epoch, batch_size=64, log_writer=None):
     # Construct the folder name for saving generated images.
     save_folder = os.path.join(
         args.output_dir,
-        "{}-steps{}-cfg{}-interval{}-{}-image{}-res{}".format(
-            model_without_ddp.method, model_without_ddp.steps, model_without_ddp.cfg_scale,
+        "epoch{}-{}-steps{}-cfg{}-interval{}-{}-image{}-res{}".format(
+            epoch, model_without_ddp.method, model_without_ddp.steps, model_without_ddp.cfg_scale,
             model_without_ddp.cfg_interval[0], model_without_ddp.cfg_interval[1], args.num_images, args.img_size
         )
     )
@@ -108,31 +108,39 @@ def evaluate(model_without_ddp, args, epoch, batch_size=64, log_writer=None):
     class_label_gen_world = np.arange(0, class_num).repeat(args.num_images // class_num)
     class_label_gen_world = np.hstack([class_label_gen_world, np.zeros(50000)])
 
-    for i in range(num_steps):
-        print("Generation step {}/{}".format(i, num_steps))
+    # Check if images already exist to skip generation
+    existing_images = []
+    if os.path.exists(save_folder):
+        existing_images = [f for f in os.listdir(save_folder) if f.endswith('.png')]
+    
+    if len(existing_images) >= args.num_images:
+        print(f"Found {len(existing_images)} existing images in {save_folder}. Skipping generation.")
+    else:
+        for i in range(num_steps):
+            print("Generation step {}/{}".format(i, num_steps))
 
-        start_idx = world_size * batch_size * i + local_rank * batch_size
-        end_idx = start_idx + batch_size
-        labels_gen = class_label_gen_world[start_idx:end_idx]
-        labels_gen = torch.Tensor(labels_gen).long().cuda()
+            start_idx = world_size * batch_size * i + local_rank * batch_size
+            end_idx = start_idx + batch_size
+            labels_gen = class_label_gen_world[start_idx:end_idx]
+            labels_gen = torch.Tensor(labels_gen).long().cuda()
 
-        with torch.amp.autocast('cuda', dtype=torch.bfloat16):
-            sampled_images = model_without_ddp.generate(labels_gen)
+            with torch.amp.autocast('cuda', dtype=torch.bfloat16):
+                sampled_images = model_without_ddp.generate(labels_gen)
 
-        torch.distributed.barrier()
+            torch.distributed.barrier()
 
-        # denormalize images
-        sampled_images = (sampled_images + 1) / 2
-        sampled_images = sampled_images.detach().cpu()
+            # denormalize images
+            sampled_images = (sampled_images + 1) / 2
+            sampled_images = sampled_images.detach().cpu()
 
-        # distributed save images
-        for b_id in range(sampled_images.size(0)):
-            img_id = i * sampled_images.size(0) * world_size + local_rank * sampled_images.size(0) + b_id
-            if img_id >= args.num_images:
-                break
-            gen_img = np.round(np.clip(sampled_images[b_id].numpy().transpose([1, 2, 0]) * 255, 0, 255))
-            gen_img = gen_img.astype(np.uint8)[:, :, ::-1]
-            cv2.imwrite(os.path.join(save_folder, '{}.png'.format(str(img_id).zfill(5))), gen_img)
+            # distributed save images
+            for b_id in range(sampled_images.size(0)):
+                img_id = i * sampled_images.size(0) * world_size + local_rank * sampled_images.size(0) + b_id
+                if img_id >= args.num_images:
+                    break
+                gen_img = np.round(np.clip(sampled_images[b_id].numpy().transpose([1, 2, 0]) * 255, 0, 255))
+                gen_img = gen_img.astype(np.uint8)[:, :, ::-1]
+                cv2.imwrite(os.path.join(save_folder, '{}.png'.format(str(img_id).zfill(5))), gen_img)
 
     torch.distributed.barrier()
 
@@ -140,6 +148,7 @@ def evaluate(model_without_ddp, args, epoch, batch_size=64, log_writer=None):
     print("Switch back from ema")
     model_without_ddp.load_state_dict(model_state_dict)
 
+    """
     # compute FID and IS
     if log_writer is not None:
         if args.img_size == 256:
@@ -165,6 +174,53 @@ def evaluate(model_without_ddp, args, epoch, batch_size=64, log_writer=None):
         log_writer.add_scalar('fid{}'.format(postfix), fid, epoch)
         log_writer.add_scalar('is{}'.format(postfix), inception_score, epoch)
         print("FID: {:.4f}, Inception Score: {:.4f}".format(fid, inception_score))
-        shutil.rmtree(save_folder)
+        # shutil.rmtree(save_folder)"""
+    
+    ### Edited
+    if log_writer is not None:
+        fid_statistics_file = None
+        input2 = None
+
+        # 1. 优先寻找预计算的统计文件 (.npz)
+        potential_stats = None
+        if args.img_size == 256:
+            potential_stats = 'fid_stats/jit_in256_stats.npz'
+        elif args.img_size == 512:
+            potential_stats = 'fid_stats/jit_in512_stats.npz'
+
+        if potential_stats and os.path.exists(potential_stats):
+            print(f"Using pre-computed statistics from: {potential_stats}")
+            fid_statistics_file = potential_stats
+            input2 = None
+        # 2. 如果没有 .npz，才考虑使用验证集文件夹
+        elif getattr(args, 'val_path', None) is not None and os.path.exists(args.val_path):
+            print(f"Calculating FID using validation images from: {args.val_path}")
+            input2 = args.val_path
+        else:
+            print("Warning: No stats file or val_path found. FID calculation may fail.")
+
+        if input2 is not None or (fid_statistics_file is not None and os.path.exists(fid_statistics_file)):
+            metrics_dict = torch_fidelity.calculate_metrics(
+                input1=save_folder,
+                input2=input2,
+                fid_statistics_file=fid_statistics_file,
+                cuda=True,
+                isc=True,
+                fid=True,
+                kid=False,
+                prc=False,
+                verbose=True,
+                samples_find_deep=True,
+            )
+            fid = metrics_dict['frechet_inception_distance']
+            inception_score = metrics_dict['inception_score_mean']
+            postfix = "_cfg{}_res{}".format(model_without_ddp.cfg_scale, args.img_size)
+            log_writer.add_scalar('fid{}'.format(postfix), fid, epoch)
+            log_writer.add_scalar('is{}'.format(postfix), inception_score, epoch)
+            print("FID: {:.4f}, Inception Score: {:.4f}".format(fid, inception_score))
+        else:
+            print("Skipping FID calculation: No validation path (--val_path) or stats file found.")
+        # shutil.rmtree(save_folder) 
+        print(f"Generated images are saved in: {save_folder}")
 
     torch.distributed.barrier()

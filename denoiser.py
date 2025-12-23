@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from model_jit import JiT_models
 
 
@@ -39,6 +40,21 @@ class Denoiser(nn.Module):
         self.cfg_scale = args.cfg
         self.cfg_interval = (args.interval_min, args.interval_max)
 
+        ### Edited
+        if getattr(args, 'use_self_supervised', False):
+            if args.ss_method == 'time_pred':
+                self.time_head = nn.Sequential(
+                    nn.Linear(self.net.hidden_size, self.net.hidden_size),
+                    nn.SiLU(),
+                    nn.Linear(self.net.hidden_size, 1)
+                )
+            elif args.ss_method == 'rotation':
+                self.rotation_head = nn.Sequential(
+                    nn.Linear(self.net.hidden_size, self.net.hidden_size),
+                    nn.SiLU(),
+                    nn.Linear(self.net.hidden_size, 4)
+                )
+
     def drop_labels(self, labels):
         drop = torch.rand(labels.shape[0], device=labels.device) < self.label_drop_prob
         out = torch.where(drop, torch.full_like(labels, self.num_classes), labels)
@@ -70,16 +86,23 @@ class Denoiser(nn.Module):
         if getattr(self.args, 'use_self_supervised', False):
             if self.args.ss_method == 'time_pred':
                 # 方法A: 预测时间步 (假设 net 输出包含特征)
-                # t_pred = self.time_head(self.net.last_feat) 
-                # ss_loss = F.mse_loss(t_pred, t)
-                pass 
+                t_pred = self.time_head(self.net.last_feat) 
+                ss_loss = F.mse_loss(t_pred.flatten(), t.flatten())
             elif self.args.ss_method == 'rotation':
                 # 方法B: 旋转预测 (需要对输入 x 进行旋转并让模型预测角度)
-                # x_90 = torch.rot90(x, 1, [2, 3])
-                # ... 计算旋转分类损失 ...
-                pass
+                rot_labels = torch.randint(0, 4, (x.size(0),), device=x.device)
+                z_rot = z.clone()
+                for i in range(1, 4):
+                    mask = (rot_labels == i)
+                    if mask.any():
+                        z_rot[mask] = torch.rot90(z[mask], i, [2, 3])
+                
+                # Forward pass with rotated input to get features
+                _ = self.net(z_rot, t.flatten(), labels_dropped)
+                rot_pred = self.rotation_head(self.net.last_feat)
+                ss_loss = F.cross_entropy(rot_pred, rot_labels)
 
-        return loss
+        return loss + ss_loss
 
     @torch.no_grad()
     def generate(self, labels):

@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 import torch
+import torch.distributed
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
@@ -119,6 +120,8 @@ def get_args_parser():
     parser.add_argument('--ss_weight', default=0.1, type=float, help='自监督损失权重')
     parser.add_argument('--subset_ratio', default=1.0, type=float, 
                         help='使用数据集的比例 (0.0 到 1.0)')
+    parser.add_argument('--val_path', default=None, type=str,
+                        help='Path to the validation dataset for FID calculation')
     
     return parser
 
@@ -233,7 +236,7 @@ def main(args):
     # Resume from checkpoint if provided
     checkpoint_path = os.path.join(args.resume, "checkpoint-last.pth") if args.resume else None
     if checkpoint_path and os.path.exists(checkpoint_path):
-        checkpoint = torch.load(checkpoint_path, map_location='cpu')
+        checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
         model_without_ddp.load_state_dict(checkpoint['model'])
 
         ema_state_dict1 = checkpoint['model_ema1']
@@ -259,6 +262,9 @@ def main(args):
             torch.manual_seed(seed)
             with torch.no_grad():
                 evaluate(model_without_ddp, args, 0, batch_size=args.gen_bsz, log_writer=log_writer)
+        
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group()
         return
 
     # Training loop
@@ -307,6 +313,9 @@ def main(args):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time:', total_time_str)
+
+    if torch.distributed.is_initialized():
+        torch.distributed.destroy_process_group()
 
 
 if __name__ == '__main__':
