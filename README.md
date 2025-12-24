@@ -112,6 +112,8 @@ done
 
 ## 运行
 
+./sh -env 改为 colab。
+
 ```py
 %cd /content/JiT
 !chmod +x train_nonlinear_ss_rotation.sh

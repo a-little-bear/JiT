@@ -140,17 +140,26 @@ def main(args):
         args.data_path = args.data_path if args.data_path != './data/imagenet' else '/root/autodl-tmp/imagenet'
         args.val_path = args.val_path or '/root/autodl-tmp/imagenet/val'
         args.output_dir = args.output_dir if args.output_dir != './output_dir' else '/root/autodl-tmp/output'
+        args.batch_size = 110
+        args.global_batch_size = 1210
+        args.gen_bsz = 300
         print(f"--- AutoDL Environment: data={args.data_path}, output={args.output_dir} ---")
     elif args.env == 'colab':
         args.data_path = args.data_path if args.data_path != './data/imagenet' else '/content/imagenet'
         args.val_path = args.val_path or '/content/imagenet/val'
         args.output_dir = args.output_dir if args.output_dir != './output_dir' else '/content/output'
-        args.num_workers = 4 # Colab CPU limited
+        args.batch_size = 90
+        args.global_batch_size = 1260
+        args.gen_bsz = 380
+        args.num_workers = 12 # Colab CPU limited
         print(f"--- Colab Environment: data={args.data_path}, output={args.output_dir} ---")
     elif args.env == 'local':
         args.data_path = args.data_path if args.data_path != './data/imagenet' else "/mnt/d/Dataset/ILSVRC2012_img_train"
         args.val_path = args.val_path or '/mnt/d/Dataset/ILSVRC2012_img_val'
         args.output_dir = args.output_dir if args.output_dir != './output_dir' else "./output_jit_b16"
+        args.batch_size = 120
+        args.global_batch_size = 1200
+        args.gen_bsz = 1024
         print(f"--- Local Environment ---")
 
     print('Job directory:', os.path.dirname(os.path.realpath(__file__)))
