@@ -288,11 +288,12 @@ def main(args):
 
     # Evaluate generation
     if args.evaluate_gen:
-        print("Evaluating checkpoint at {} epoch".format(args.start_epoch))
+        actual_epoch = args.start_epoch - 1 if args.start_epoch > 0 else 0
+        print("Evaluating checkpoint at {} epoch".format(actual_epoch))
         with torch.random.fork_rng():
             torch.manual_seed(seed)
             with torch.no_grad():
-                evaluate(model_without_ddp, args, 0, batch_size=args.gen_bsz, log_writer=log_writer)
+                evaluate(model_without_ddp, args, actual_epoch, batch_size=args.gen_bsz, log_writer=log_writer)
         
         if torch.distributed.is_initialized():
             torch.distributed.destroy_process_group()

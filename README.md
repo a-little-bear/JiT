@@ -130,7 +130,9 @@ drive.flush_and_unmount()
 
 
 
-# AutoDL 安装 ImageNet
+# AutoDL 
+
+## 安装 ImageNet
 
 AutoPanel切换成清华源。启用加速：`source /etc/network_turbo`
 
@@ -145,29 +147,9 @@ tar -xf /root/autodl-pub/ImageNet/ILSVRC2012/ILSVRC2012_img_val.tar -C /root/aut
 tar -xf /root/autodl-pub/ImageNet/ILSVRC2012/ILSVRC2012_img_train.tar -C /root/autodl-tmp/imagenet/train
 ```
 
-clone and install
+## 依赖
 
 ```py
-rm -f ~/.condarc
-cat <<EOF > ~/.condarc
-channels:
-  - defaults
-show_channel_urls: true
-default_channels:
-  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
-  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r
-  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2
-custom_channels:
-  conda-forge: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
-  msys2: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
-  bioconda: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
-  menpo: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
-  pytorch: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
-  pytorch-nightly: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
-  simpleitk: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
-EOF
-conda clean -i
-
 git clone --depth=1 https://github.com/a-little-bear/JiT.git
 
 conda env create -f environment.yaml
@@ -183,3 +165,22 @@ pip uninstall torch torchvision torchaudio -y
 pip install torch==2.11.0.dev20251222+cu128 torchvision==0.25.0.dev20251222+cu128 torchaudio==2.10.0.dev20251222+cu128 --index-url https://download.pytorch.org/whl/nightly/cu128
 ```
 
+## 重新拉取
+
+```
+git fetch --all
+git reset --hard new/main
+git pull new main
+```
+
+然后 .sh 修改 env 为 autodl，给 .sh 加上 chmod +x xxx.sh
+
+## 保存输出
+
+```
+# 假设输出在 /root/autodl-tmp/output
+cd /root/autodl-tmp
+tar -czvf output_data.tar.gz output/
+```
+
+然后在AutoPanel上传压缩包到阿里云盘

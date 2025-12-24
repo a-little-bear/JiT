@@ -6,11 +6,35 @@ import shutil
 import torch
 import numpy as np
 import cv2
+from PIL import Image
+from torch.utils.data import Dataset
 
 import util.misc as misc
 import util.lr_sched as lr_sched
 import torch_fidelity
 import copy
+
+
+class ResizedDirectoryDataset(Dataset):
+    def __init__(self, root, size=256):
+        self.root = root
+        self.size = size
+        # 递归查找图片
+        self.files = []
+        for r, d, f in os.walk(root):
+            for file in f:
+                if file.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    self.files.append(os.path.join(r, file))
+        self.files.sort()
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self, i):
+        img = Image.open(self.files[i]).convert('RGB')
+        # 统一缩放到指定尺寸，与训练保持一致
+        img = img.resize((self.size, self.size), Image.BILINEAR)
+        return torch.from_numpy(np.array(img).transpose(2, 0, 1)) # 返回 CHW 格式 Tensor
 
 
 def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, epoch, log_writer=None, args=None, accum_iter=1):
@@ -183,7 +207,13 @@ def evaluate(model_without_ddp, args, epoch, batch_size=64, log_writer=None):
         fid_statistics_file = None
         input2 = None
 
-        # 1. 优先寻找预计算的统计文件 (.npz)
+        # 1. 检查验证集路径 (KID 和 Precision/Recall 必须使用原始图片或特征)
+        if getattr(args, 'val_path', None) is not None and os.path.exists(args.val_path):
+            print(f"Loading and resizing validation set from {args.val_path}...")
+            input2 = ResizedDirectoryDataset(args.val_path, size=args.img_size)
+            print(f"Found {len(input2)} validation images.")
+
+        # 2. 寻找预计算的 FID 统计文件 (.npz) 以加速 FID 计算
         potential_stats = None
         if args.img_size == 256:
             potential_stats = 'fid_stats/jit_in256_stats.npz'
@@ -191,15 +221,11 @@ def evaluate(model_without_ddp, args, epoch, batch_size=64, log_writer=None):
             potential_stats = 'fid_stats/jit_in512_stats.npz'
 
         if potential_stats and os.path.exists(potential_stats):
-            print(f"Using pre-computed statistics from: {potential_stats}")
+            print(f"Using pre-computed FID statistics from: {potential_stats}")
             fid_statistics_file = potential_stats
-            input2 = None
-        # 2. 如果没有 .npz，才考虑使用验证集文件夹
-        elif getattr(args, 'val_path', None) is not None and os.path.exists(args.val_path):
-            print(f"Calculating FID using validation images from: {args.val_path}")
-            input2 = args.val_path
-        else:
-            print("Warning: No stats file or val_path found. FID calculation may fail.")
+        
+        if input2 is None and fid_statistics_file is None:
+            print("Warning: No stats file or val_path found. Metrics calculation may fail.")
 
         if input2 is not None or (fid_statistics_file is not None and os.path.exists(fid_statistics_file)):
             metrics_dict = torch_fidelity.calculate_metrics(
@@ -209,17 +235,35 @@ def evaluate(model_without_ddp, args, epoch, batch_size=64, log_writer=None):
                 cuda=True,
                 isc=True,
                 fid=True,
-                kid=False,
-                prc=False,
+                kid=True,
+                prc=True,
                 verbose=True,
                 samples_find_deep=True,
             )
             fid = metrics_dict['frechet_inception_distance']
             inception_score = metrics_dict['inception_score_mean']
+            kid = metrics_dict['kernel_inception_distance_mean']
+            precision = metrics_dict['precision']
+            recall = metrics_dict['recall']
+
             postfix = "_cfg{}_res{}".format(model_without_ddp.cfg_scale, args.img_size)
-            log_writer.add_scalar('fid{}'.format(postfix), fid, epoch)
-            log_writer.add_scalar('is{}'.format(postfix), inception_score, epoch)
-            print("FID: {:.4f}, Inception Score: {:.4f}".format(fid, inception_score))
+            if log_writer is not None:
+                log_writer.add_scalar('fid{}'.format(postfix), fid, epoch)
+                log_writer.add_scalar('is{}'.format(postfix), inception_score, epoch)
+                log_writer.add_scalar('kid{}'.format(postfix), kid, epoch)
+                log_writer.add_scalar('precision{}'.format(postfix), precision, epoch)
+                log_writer.add_scalar('recall{}'.format(postfix), recall, epoch)
+            
+            print("FID: {:.4f}, IS: {:.4f}, KID: {:.4f}, Precision: {:.4f}, Recall: {:.4f}".format(
+                fid, inception_score, kid, precision, recall))
+            
+            # Save to CSV for easy plotting
+            csv_path = os.path.join(args.output_dir, "metrics.csv")
+            file_exists = os.path.isfile(csv_path)
+            with open(csv_path, 'a') as f:
+                if not file_exists:
+                    f.write("epoch,fid,is,kid,precision,recall\n")
+                f.write(f"{epoch},{fid:.4f},{inception_score:.4f},{kid:.4f},{precision:.4f},{recall:.4f}\n")
         else:
             print("Skipping FID calculation: No validation path (--val_path) or stats file found.")
         # shutil.rmtree(save_folder) 

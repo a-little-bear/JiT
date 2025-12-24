@@ -27,6 +27,7 @@ class BottleneckPatchEmbed(nn.Module):
         self.num_patches = num_patches
 
         self.proj1 = nn.Conv2d(in_chans, pca_dim, kernel_size=patch_size, stride=patch_size, bias=False)
+        ### Edited
         self.act = nn.SiLU() if use_nonlinear else nn.Identity()
         self.proj2 = nn.Conv2d(pca_dim, embed_dim, kernel_size=1, stride=1, bias=bias)
 
@@ -197,16 +198,16 @@ class JiTBlock(nn.Module):
         )
 
         ### Edited
-        if args is not None and getattr(args, 'use_nonlinear', False):
-            self.mlp = nn.Sequential(
-                nn.Linear(hidden_size, hidden_size // 2),
-                nn.GELU(),
-                nn.Linear(hidden_size // 2, mlp_hidden_dim),
-                nn.SiLU(),
-                nn.Linear(mlp_hidden_dim, hidden_size)
-            )
-        else:
-            self.mlp = SwiGLUFFN(hidden_size, mlp_hidden_dim, drop=proj_drop)
+        #if args is not None and getattr(args, 'use_nonlinear', False):
+        #    self.mlp = nn.Sequential(
+        #        nn.Linear(hidden_size, hidden_size // 2),
+        #        nn.GELU(),
+        #        nn.Linear(hidden_size // 2, mlp_hidden_dim),
+        #        nn.SiLU(),
+        #        nn.Linear(mlp_hidden_dim, hidden_size)
+        #    )
+        #else:
+        self.mlp = SwiGLUFFN(hidden_size, mlp_hidden_dim, drop=proj_drop)
 
     @torch.compile
     def forward(self, x,  c, feat_rope=None):
