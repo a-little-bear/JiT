@@ -6,11 +6,10 @@ export CC=$(which x86_64-conda-linux-gnu-gcc)
 export CXX=$(which x86_64-conda-linux-gnu-g++)
 
 # 设置你的数据路径
-TRAIN_DIR="/mnt/d/Dataset/ILSVRC2012_img_train"
-OUTPUT_DIR="./output_jit_b16"
-
+#TRAIN_DIR="/mnt/d/Dataset/ILSVRC2012_img_train"
+#OUTPUT_DIR="./output_jit_b16"
 # 创建输出目录
-mkdir -p ${OUTPUT_DIR}
+#mkdir -p ${OUTPUT_DIR}
 
 # 启动训练
 # nproc_per_node=1 (单卡)
@@ -32,10 +31,10 @@ main_jit.py \
 --epochs 1000 --warmup_epochs 5 \
 --gen_bsz 1024 \
 --num_images 2000 --cfg 2.9 --interval_min 0.1 --interval_max 1.0 \
---output_dir ${OUTPUT_DIR} \
---data_path ${TRAIN_DIR} \
 --online_eval \
 --eval_freq 20 \
 --ema_decay1 0.999 \
 --ema_decay2 0.9999 \
---env local
+--env local \
+#--output_dir ${OUTPUT_DIR} \
+#--data_path ${TRAIN_DIR} \
