@@ -28,10 +28,12 @@ main_jit.py \
 --subset_ratio 0.01 \
 --global_batch_size 1300 \
 --blr 5e-5 \
---epochs 600 --warmup_epochs 5 \
+--epochs 1000 --warmup_epochs 5 \
 --gen_bsz 1024 \
 --num_images 2000 --cfg 2.9 --interval_min 0.1 --interval_max 1.0 \
 --output_dir ${OUTPUT_DIR} \
 --data_path ${TRAIN_DIR} \
 --online_eval \
---eval_freq 20 
+--eval_freq 20 \
+--ema_decay1 0.999 \
+--ema_decay2 0.9999 \
