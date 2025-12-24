@@ -122,6 +122,8 @@ def get_args_parser():
                         help='使用数据集的比例 (0.0 到 1.0)')
     parser.add_argument('--val_path', default=None, type=str,
                         help='Path to the validation dataset for FID calculation')
+    parser.add_argument('--env', default='local', type=str, choices=['local', 'autodl', 'colab'],
+                        help='Running environment (local, autodl, colab)')
     
     return parser
 
@@ -131,6 +133,21 @@ def main(args):
     torch.set_float32_matmul_precision('high')
     
     misc.init_distributed_mode(args)
+
+    ### Edited
+    # Environment-based path configuration
+    if args.env == 'autodl':
+        args.data_path = args.data_path if args.data_path != './data/imagenet' else '/root/autodl-tmp/imagenet'
+        args.val_path = args.val_path or '/root/autodl-tmp/imagenet/val'
+        args.output_dir = args.output_dir if args.output_dir != './output_dir' else '/root/autodl-tmp/output'
+        print(f"--- AutoDL Environment: data={args.data_path}, output={args.output_dir} ---")
+    elif args.env == 'colab':
+        args.data_path = args.data_path if args.data_path != './data/imagenet' else '/content/imagenet'
+        args.val_path = args.val_path or '/content/imagenet/val'
+        args.output_dir = args.output_dir if args.output_dir != './output_dir' else '/content/output'
+        args.num_workers = 4 # Colab CPU limited
+        print(f"--- Colab Environment: data={args.data_path}, output={args.output_dir} ---")
+
     print('Job directory:', os.path.dirname(os.path.realpath(__file__)))
     print("Arguments:\n{}".format(args).replace(', ', ',\n'))
 

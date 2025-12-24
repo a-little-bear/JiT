@@ -68,7 +68,7 @@ VAL_TAR = '/content/drive/MyDrive/Dataset/ImageNet2012/ILSVRC2012_img_val.tar'
 GT_FILE = '/content/JiT/ILSVRC2012_validation_ground_truth.txt'
 
 # 创建本地存储目录（Colab 根目录下，不会改动 Drive 原文件）
-!mkdir -p /content/imagenet/train /content/imagenet/val
+!mkdir -p /content/imagenet/train /content/imagenet/val /content/output
 ```
 
 ```
@@ -110,21 +110,18 @@ for f in *.tar; do
 done
 ```
 
-## 安装依赖
+## 运行
 
 ```py
-# 2. 安装来自 GitHub 的特定依赖
-!pip install -e git+https://github.com/LTH14/torch-fidelity.git@master#egg=torch-fidelity
+%cd /content/JiT
+!chmod +x train_nonlinear_ss_rotation.sh
+!./train_nonlinear_ss_rotation.sh
+```
 
-# 3. 验证关键版本（可选）
-import torch
-print(f"PyTorch version: {torch.__version__}")
-print(f"CUDA available: {torch.cuda.is_available()}")
+## 最终保存输出
 
-import timm
-import einops
-import torch_fidelity
-print("所有依赖已成功加载！")
+```
+drive.flush_and_unmount()
 ```
 
 
