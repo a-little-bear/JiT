@@ -10,6 +10,8 @@ Changes to the Original JiT Code:
 
 # Google Colab
 
+## 数据下载
+
 下载 ImageNet
 
 ```py
@@ -26,7 +28,13 @@ drive.mount('/content/drive')
 
 # 下载验证集
 !wget -c "https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_val.tar" -O ILSVRC2012_img_val.tar
+
+!ls -lh /content/drive/MyDrive/Dataset/ImageNet2012
+
+drive.flush_and_unmount()
 ```
+
+## 环境配置
 
 安装Repo
 
@@ -34,39 +42,77 @@ drive.mount('/content/drive')
 from google.colab import drive
 drive.mount('/content/drive')
 
-%cd /content/drive/MyDrive/Repo
 !git clone https://github.com/a-little-bear/JiT.git
+!pip install -e git+https://github.com/LTH14/torch-fidelity.git@master#egg=torch-fidelity
 
-%cd /content/drive/MyDrive/Repo/JiT
+# 重启notebook应用torch fidelity
 ```
 
-Notebook：
+```
+import torch
+print(f"PyTorch version: {torch.__version__}")
+print(f"CUDA available: {torch.cuda.is_available()}")
 
-复制Repo
-
-```py
-from google.colab import drive
-drive.mount('/content/drive')
-
-!cp -r /content/drive/MyDrive/Repo/JiT /content/JiT
-%cd /cont
+import timm
+import einops
+import torch_fidelity
+print("所有依赖已成功加载！")
 ```
 
+## 数据处理
 
+```
+# 定义路径
+TRAIN_TAR = '/content/drive/MyDrive/Dataset/ImageNet2012/ILSVRC2012_img_train.tar'
+VAL_TAR = '/content/drive/MyDrive/Dataset/ImageNet2012/ILSVRC2012_img_val.tar'
+GT_FILE = '/content/JiT/ILSVRC2012_validation_ground_truth.txt'
 
-安装依赖
+# 创建本地存储目录（Colab 根目录下，不会改动 Drive 原文件）
+!mkdir -p /content/imagenet/train /content/imagenet/val
+```
+
+```
+%%bash
+# 1. 解压验证集到本地 val 文件夹
+# tar -xf /content/drive/MyDrive/Dataset/ImageNet2012/ILSVRC2012_img_val.tar -C /content/imagenet/val
+
+# 2. 下载处理脚本（ImageNet 官方常用的整理脚本，或使用下面这段命令直接处理）
+# 这里我们直接用 bash 读取 ground truth 并移动文件
+cd /content/imagenet/val
+
+# 这里的处理逻辑：读取每一行 label，创建目录并移动对应图片
+# 注意：ILSVRC2012_img_val_00000001.JPEG 对应 ground truth 第一行
+i=1
+while read label; do
+    prefix="n$(printf "%08d" $label)" # 这里需要注意：ground truth 通常是 class ID 序号，需对应 Synset ID
+    # 如果你的 txt 已经是 n 开头的文件夹名，直接用 $label 即可
+    mkdir -p $label
+    filename=$(printf "ILSVRC2012_val_%08d.JPEG" $i)
+    if [ -f "$filename" ]; then
+        mv "$filename" $label/
+    fi
+    i=$((i+1))
+done < /content/JiT/ILSVRC2012_validation_ground_truth.txt
+```
+
+```
+%%bash
+# 1. 解压主压缩包到本地 train 文件夹
+tar -xf /content/drive/MyDrive/Dataset/ImageNet2012/ILSVRC2012_img_train.tar -C /content/imagenet/train
+
+# 2. 循环解压内部的 1000 个子压缩包
+cd /content/imagenet/train
+for f in *.tar; do
+    d="${f%.tar}"
+    mkdir -p "$d"
+    tar -xf "$f" -C "$d"
+    rm "$f" # 删除本地解压出来的子 tar 包以节省 Colab 空间，不影响 Drive 里的原文件
+done
+```
+
+## 安装依赖
 
 ```py
-# 1. 安装 YAML 中指定的第三方库
-# 注意：我们跳过了 pytorch 和 cuda，因为 Colab 已经内置了完全相同的版本
-!pip install numpy==1.22 \
-             opencv-python==4.11.0.86 \
-             timm==0.9.12 \
-             tensorboard==2.10.0 \
-             scipy==1.9.1 \
-             einops==0.8.1 \
-             gdown==5.2.0
-
 # 2. 安装来自 GitHub 的特定依赖
 !pip install -e git+https://github.com/LTH14/torch-fidelity.git@master#egg=torch-fidelity
 
@@ -86,6 +132,8 @@ print("所有依赖已成功加载！")
 
 
 # AutoDL 安装 ImageNet
+
+AutoPanel切换成清华源。启用加速：`source /etc/network_turbo`
 
 ```py
 # 1. 创建目标文件夹
@@ -121,9 +169,7 @@ custom_channels:
 EOF
 conda clean -i
 
-
-
-git clone --depth=1 https://gitclone.com/github.com/a-little-bear/JiT.git
+git clone --depth=1 https://github.com/a-little-bear/JiT.git
 
 conda env create -f environment.yaml
 conda activate jit
@@ -133,8 +179,8 @@ conda activate jit
 # 先卸载清理（必做）
 pip uninstall torch torchvision torchaudio -y
 
-# 强制安装 20251203 的 cu128 版本
-# 注意：这里把 cu126 换成了 cu128
-pip install torch==2.10.0.dev20251203+cu128 torchvision==0.25.0.dev20251203+cu128 torchaudio==2.10.0.dev20251203+cu128 --index-url https://download.pytorch.org/whl/nightly/cu128
+# 最新 nightly：https://download.pytorch.org/whl/nightly/torch/
+
+pip install torch==2.11.0.dev20251222+cu128 torchvision==0.25.0.dev20251222+cu128 torchaudio==2.10.0.dev20251222+cu128 --index-url https://download.pytorch.org/whl/nightly/cu128
 ```
 

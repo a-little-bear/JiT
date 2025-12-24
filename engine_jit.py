@@ -73,6 +73,12 @@ def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, ep
 def evaluate(model_without_ddp, args, epoch, batch_size=64, log_writer=None):
 
     model_without_ddp.eval()
+    
+    ### Edited
+    seed = args.seed + misc.get_rank()
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
     world_size = misc.get_world_size()
     local_rank = misc.get_rank()
     num_steps = args.num_images // (batch_size * world_size) + 1
