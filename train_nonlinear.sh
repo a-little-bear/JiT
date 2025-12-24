@@ -38,3 +38,4 @@ main_jit.py \
 --eval_freq 20 \
 --ema_decay1 0.999 \
 --ema_decay2 0.9999 \
+--env local

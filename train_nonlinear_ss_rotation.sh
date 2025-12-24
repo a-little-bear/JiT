@@ -6,8 +6,8 @@ export CC=$(which x86_64-conda-linux-gnu-gcc)
 export CXX=$(which x86_64-conda-linux-gnu-g++)
 
 # 设置你的数据路径
-TRAIN_DIR="/mnt/d/Dataset/ILSVRC2012_img_train"
-OUTPUT_DIR="./nonlinear_ss_rotation_output_jit_b16"
+#TRAIN_DIR="/mnt/d/Dataset/ILSVRC2012_img_train"
+#OUTPUT_DIR="./nonlinear_ss_rotation_output_jit_b16"
 
 # 创建输出目录
 mkdir -p ${OUTPUT_DIR}
@@ -38,3 +38,4 @@ main_jit.py \
 --eval_freq 20 \
 --ema_decay1 0.999 \
 --ema_decay2 0.9999 \
+--env local

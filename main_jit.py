@@ -147,6 +147,11 @@ def main(args):
         args.output_dir = args.output_dir if args.output_dir != './output_dir' else '/content/output'
         args.num_workers = 4 # Colab CPU limited
         print(f"--- Colab Environment: data={args.data_path}, output={args.output_dir} ---")
+    elif args.env == 'local':
+        args.data_path = args.data_path if args.data_path != './data/imagenet' else "/mnt/d/Dataset/ILSVRC2012_img_train"
+        args.val_path = args.val_path or '/mnt/d/Dataset/ILSVRC2012_img_val'
+        args.output_dir = args.output_dir if args.output_dir != './output_dir' else "./output_jit_b16"
+        print(f"--- Local Environment ---")
 
     print('Job directory:', os.path.dirname(os.path.realpath(__file__)))
     print("Arguments:\n{}".format(args).replace(', ', ',\n'))
